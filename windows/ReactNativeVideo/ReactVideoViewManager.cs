@@ -120,12 +120,6 @@ namespace ReactNativeVideo
             view.ProgressUpdateInterval = progressUpdateInterval;
         }
 
-        protected override void OnAfterUpdateTransaction(ReactVideoView view)
-        {
-            base.OnAfterUpdateTransaction(view);
-            view.UpdateVideoViewOptions().Wait();
-        }
-
         public override void OnDropViewInstance(ThemedReactContext reactContext, ReactVideoView view)
         {
             base.OnDropViewInstance(reactContext, view);

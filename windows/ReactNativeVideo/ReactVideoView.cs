@@ -29,8 +29,6 @@ namespace ReactNativeVideo
         private double _volume;
         private double _rate;
 
-        private string _uri;
-
         public ReactVideoView()
         {
             _timer = new DispatcherTimer();
@@ -49,56 +47,53 @@ namespace ReactNativeVideo
             return FILE_SCHEME.Equals(scheme);
         }
 
-        public async Task UpdateVideoViewOptions()
+        private async Task<StorageFile> OpenPathAsync(string path)
         {
-            if(_uri == null)
-            {
-                return;
-            }
-
-            var vidUri = new Uri(_uri);
-            if (vidUri != null)
-            {
-                if(IsFileUri(vidUri))
-                {
-                    try
-                    {
-                        var sourceFile = await StorageFile.GetFileFromPathAsync(_uri);
-                        base.Source = MediaSource.CreateFromStorageFile(sourceFile);
-                    }
-                    catch(Exception ex)
-                    {
-                        Console.WriteLine($"Error finding video file: {ex.Message}");
-                    }
-                    
-                }
-                else
-                {
-                    base.Source = MediaSource.CreateFromUri(vidUri);
-                }
-
-                this.GetReactContext()
-                    .GetNativeModule<UIManagerModule>()
-                    .EventDispatcher
-                    .DispatchEvent(
-                        new ReactVideoEvent(
-                        ReactVideoEventType.LoadStart.GetEventName(),
-                        this.GetTag(),
-                        new JObject
-                        {
-                                { "src", _uri }
-                    }));
-
-                ApplyModifiers();
-                SubscribeEvents();
-            }
+            return await StorageFile.GetFileFromPathAsync(path).AsTask().ConfigureAwait(false);
         }
 
         public new string Source
         {
             set
             {
-                _uri = value;
+                var uri = value;
+                var vidUri = new Uri(uri);
+                if (vidUri != null)
+                {
+                    if (IsFileUri(vidUri))
+                    {
+                        try
+                        {
+
+                            var sourceFile = OpenPathAsync(uri).GetAwaiter().GetResult();
+                            base.Source = MediaSource.CreateFromStorageFile(sourceFile);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Error finding video file: {ex.Message}");
+                        }
+
+                    }
+                    else
+                    {
+                        base.Source = MediaSource.CreateFromUri(vidUri);
+                    }
+
+                    this.GetReactContext()
+                        .GetNativeModule<UIManagerModule>()
+                        .EventDispatcher
+                        .DispatchEvent(
+                            new ReactVideoEvent(
+                            ReactVideoEventType.LoadStart.GetEventName(),
+                            this.GetTag(),
+                            new JObject
+                            {
+                                { "src", uri }
+                        }));
+
+                    ApplyModifiers();
+                    SubscribeEvents();
+                }
             }
         }
 
@@ -209,6 +204,7 @@ namespace ReactNativeVideo
             var mediaPlayer = MediaPlayer;
             if (mediaPlayer != null)
             {
+                mediaPlayer.Pause();
                 _timer.Tick -= OnTick;
                 mediaPlayer.MediaOpened -= OnMediaOpened;
                 mediaPlayer.MediaFailed -= OnMediaFailed;
@@ -217,7 +213,6 @@ namespace ReactNativeVideo
                 mediaPlayer.PlaybackSession.BufferingEnded -= OnBufferingEnded;
                 MediaPlayer.PlaybackSession.SeekCompleted -= OnSeekCompleted;
             }
-            _uri = null;
             _timer.Stop();
         }
 
