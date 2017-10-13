@@ -2,9 +2,11 @@
 using ReactNative.UIManager;
 using ReactNative.UIManager.Events;
 using System;
+using System.Threading.Tasks;
 using Windows.ApplicationModel.Core;
 using Windows.Media.Core;
 using Windows.Media.Playback;
+using Windows.Storage;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -14,6 +16,8 @@ namespace ReactNativeVideo
     class ReactVideoView : MediaPlayerElement, IDisposable
     {
         public const string EVENT_PROP_SEEK_TIME = "seekTime";
+
+        private const string FILE_SCHEME = "file";
 
         private readonly DispatcherTimer _timer;
 
@@ -25,6 +29,8 @@ namespace ReactNativeVideo
         private double _volume;
         private double _rate;
 
+        private string _uri;
+
         public ReactVideoView()
         {
             _timer = new DispatcherTimer();
@@ -32,28 +38,67 @@ namespace ReactNativeVideo
             _timer.Start();
         }
 
-        public new string Source
+        private string GetSchemeOrNull(Uri uri)
         {
-            set
-            {
-                var uri = value;
+            return uri == null ? null : uri.Scheme;
+        }
 
-                base.Source = MediaSource.CreateFromUri(new Uri(uri));
+        private bool IsFileUri(Uri uri)
+        {
+            string scheme = GetSchemeOrNull(uri);
+            return FILE_SCHEME.Equals(scheme);
+        }
+
+        public async Task UpdateVideoViewOptions()
+        {
+            if(_uri == null)
+            {
+                return;
+            }
+
+            var vidUri = new Uri(_uri);
+            if (vidUri != null)
+            {
+                if(IsFileUri(vidUri))
+                {
+                    try
+                    {
+                        var sourceFile = await StorageFile.GetFileFromPathAsync(_uri);
+                        base.Source = MediaSource.CreateFromStorageFile(sourceFile);
+                    }
+                    catch(Exception ex)
+                    {
+                        Console.WriteLine($"Error finding video file: {ex.Message}");
+                    }
+                    
+                }
+                else
+                {
+                    base.Source = MediaSource.CreateFromUri(vidUri);
+                }
 
                 this.GetReactContext()
                     .GetNativeModule<UIManagerModule>()
                     .EventDispatcher
                     .DispatchEvent(
                         new ReactVideoEvent(
-                            ReactVideoEventType.LoadStart.GetEventName(),
-                            this.GetTag(),
-                            new JObject
-                            {
-                                { "src", uri }
-                            }));
+                        ReactVideoEventType.LoadStart.GetEventName(),
+                        this.GetTag(),
+                        new JObject
+                        {
+                                { "src", _uri }
+                    }));
 
                 ApplyModifiers();
                 SubscribeEvents();
+            }
+        }
+
+        public new string Source
+        {
+            set
+            {
+                _uri = value;
             }
         }
 
@@ -172,7 +217,7 @@ namespace ReactNativeVideo
                 mediaPlayer.PlaybackSession.BufferingEnded -= OnBufferingEnded;
                 MediaPlayer.PlaybackSession.SeekCompleted -= OnSeekCompleted;
             }
-
+            _uri = null;
             _timer.Stop();
         }
 
